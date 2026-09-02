@@ -349,12 +349,12 @@ public sealed class CarrotHunterService
             // The authored North Horn order owns travel decisions: walk every pad inside
             // one region, then use aethernet exactly once before starting the next region.
             if (crossedRegion
-                && TryChooseAethernetHop(player.Position, destination, aetherytes, main, out AethernetData departure, out AethernetData arrival))
+                && TryChooseAethernetHop(player.Position, destination, aetherytes, main, out AethernetData boundaryDeparture, out AethernetData boundaryArrival))
             {
-                hopDeparture = departure;
-                hopArrival = arrival;
+                hopDeparture = boundaryDeparture;
+                hopArrival = boundaryArrival;
                 Phase = AetheryteApproach.IsReadyForLifestream(zone, lifestream, player.Position)
-                        && AetheryteApproach.IsAlreadyAtAetheryte(departure, player.Position)
+                        && AetheryteApproach.IsAlreadyAtAetheryte(boundaryDeparture, player.Position)
                     ? CarrotHuntPhase.Teleporting
                     : CarrotHuntPhase.ApproachingAetheryte;
                 return;
