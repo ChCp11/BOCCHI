@@ -89,6 +89,9 @@ public sealed class CarrotHunterService
 
     private CarrotData? currentAuthored;
 
+    /// <summary>The region of the last completed North Horn pad, used to Return only at region boundaries.</summary>
+    private NorthHornCarrotRegion? lastNorthHornRegion;
+
     private ulong? currentLiveCarrotId;
 
     private Vector3 currentTargetPosition;
@@ -342,8 +345,13 @@ public sealed class CarrotHunterService
         bool wrongFloor = !HuntDistances.IsSameFloor(player.Position, destination);
         // Keep Return for pad↔pad tour hops — and when 2D looks close but we are on the
         // wrong shelf (cliff / ridge). Direct then climbs into mesh ("underground").
+        bool crossedNorthHornRegion = NorthHornCarrotRegions.AppliesTo(zone.ZoneId)
+            && lastNorthHornRegion is { } previousRegion
+            && NorthHornCarrotRegions.Classify(authored.Id) != previousRegion;
         bool allowReturn = currentLiveCarrotId == null
-            && (localDist > HuntDistances.NearbyLiveDivertRange || wrongFloor);
+            && (NorthHornCarrotRegions.AppliesTo(zone.ZoneId)
+                ? crossedNorthHornRegion
+                : localDist > HuntDistances.NearbyLiveDivertRange || wrongFloor);
 
         HopMode mode = ChooseHopMode(
             player.Position,
@@ -1553,6 +1561,7 @@ public sealed class CarrotHunterService
     {
         if (currentAuthored is { } authored)
         {
+            RememberCompletedNorthHornRegion(authored);
             finishedAuthoredIds.Add(authored.Id);
         }
 
@@ -1564,6 +1573,7 @@ public sealed class CarrotHunterService
     {
         if (currentAuthored is { } authored)
         {
+            RememberCompletedNorthHornRegion(authored);
             log.Debug("Carrot hunt: finished authored {Id} near {Pos:F0}", authored.Id, currentTargetPosition);
             if (treasureConfig.LoopCarrotHunt)
             {
@@ -1579,6 +1589,14 @@ public sealed class CarrotHunterService
 
         vnav.Stop();
         RecalculateAndAdvance();
+    }
+
+    private void RememberCompletedNorthHornRegion(CarrotData authored)
+    {
+        if (NorthHornCarrotRegions.AppliesTo(zones.GetZone().ZoneId))
+        {
+            lastNorthHornRegion = NorthHornCarrotRegions.Classify(authored.Id);
+        }
     }
 
     private bool TryGetCurrentLiveCarrot(out Carrot carrot)
@@ -1899,6 +1917,7 @@ public sealed class CarrotHunterService
     private void ClearCurrent()
     {
         currentAuthored = null;
+        lastNorthHornRegion = null;
         currentLiveCarrotId = null;
         currentTargetPosition = Vector3.Zero;
         ClearWalkVias();
