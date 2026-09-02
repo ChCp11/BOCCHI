@@ -10,7 +10,7 @@ namespace BOCCHI.Common.Services;
 public sealed class Mp3SoundPlayer(IDalamudPluginInterface plugin, IPluginLog log) : IMp3SoundPlayer, IOnStop, IDisposable
 {
     private readonly object gate = new();
-    private Mp3FileReader? reader;
+    private MediaFoundationReader? reader;
     private WaveOutEvent? waveOut;
 
     public string SoundsDirectory
@@ -58,7 +58,7 @@ public sealed class Mp3SoundPlayer(IDalamudPluginInterface plugin, IPluginLog lo
             try
             {
                 DisposeAudio();
-                reader = new Mp3FileReader(path);
+                reader = new MediaFoundationReader(path);
                 waveOut = new WaveOutEvent();
                 waveOut.PlaybackStopped += OnPlaybackStopped;
                 waveOut.Init(reader);
@@ -114,3 +114,4 @@ public sealed class Mp3SoundPlayer(IDalamudPluginInterface plugin, IPluginLog lo
         reader = null;
     }
 }
+
