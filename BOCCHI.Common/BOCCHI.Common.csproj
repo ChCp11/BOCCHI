@@ -1,10 +1,11 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <AssemblyName>BOCCHI.Common</AssemblyName>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="NAudio" Version="2.3.0"/>
+        <PackageReference Include="NAudio.Core" Version="2.3.0"/>
+        <PackageReference Include="NAudio.WinMM" Version="2.3.0"/>
         <ProjectReference Include="..\Ocelot\Ocelot.Rotation\Ocelot.Rotation.csproj"/>
     </ItemGroup>
 
@@ -14,3 +15,4 @@
         </None>
     </ItemGroup>
 </Project>
+
