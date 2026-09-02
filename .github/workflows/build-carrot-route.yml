@@ -1,0 +1,59 @@
+name: Build BOCCHI fork
+
+on:
+  push:
+    branches:
+      - carrot-route-north-horn
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out BOCCHI
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Prepare Plogon build
+        shell: bash
+        run: |
+          git clone --depth 1 https://github.com/goatcorp/Plogon.git ci-plogon
+          mkdir -p ci-manifests/BOCCHI ci-output ci-work ci-artifacts
+          cp assets/icon.png ci-manifests/BOCCHI/icon.png
+          cat > ci-manifests/BOCCHI/manifest.toml <<EOF
+          [plugin]
+          repository = "https://github.com/ChCp11/BOCCHI.git"
+          commit = "$GITHUB_SHA"
+          owners = [ "ChCp11" ]
+          changelog = """
+          Fixed North Horn carrot route order.
+          """
+          EOF
+
+      - name: Build with Dalamud Plogon
+        shell: bash
+        run: |
+          dotnet run --project ci-plogon/Plogon/Plogon.csproj -- \
+            --manifest-folder="$GITHUB_WORKSPACE/ci-manifests" \
+            --output-folder="$GITHUB_WORKSPACE/ci-output" \
+            --work-folder="$GITHUB_WORKSPACE/ci-work" \
+            --static-folder="$GITHUB_WORKSPACE/ci-plogon/Plogon/static" \
+            --artifact-folder="$GITHUB_WORKSPACE/ci-artifacts" \
+            --build-overrides-file="$GITHUB_WORKSPACE/ci-manifests/overrides.toml" \
+            --mode=Development --build-all
+
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BOCCHI-carrot-route
+          path: ci-artifacts/
+          if-no-files-found: error
