@@ -1,8 +1,6 @@
 <Project>
     <PropertyGroup>
         <TargetFramework>net10.0-windows</TargetFramework>
-        <EnableWindowsTargeting>true</EnableWindowsTargeting>
-        <TargetLatestRuntimePatch>false</TargetLatestRuntimePatch>
         <LangVersion>preview</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
@@ -37,11 +35,5 @@
         <Reference Include="FFXIVClientStructs" HintPath="$(DalamudLibPath)FFXIVClientStructs.dll" Private="False"/>
         <Reference Include="InteropGenerator.Runtime" HintPath="$(DalamudLibPath)InteropGenerator.Runtime.dll" Private="False"/>
         <Reference Include="Newtonsoft.Json" HintPath="$(DalamudLibPath)Newtonsoft.Json.dll" Private="False"/>
-    </ItemGroup>
-    <ItemGroup>
-        <KnownFrameworkReference Update="Microsoft.WindowsDesktop.App.WindowsForms"
-                                 TargetingPackVersion="10.0.0"
-                                 DefaultRuntimeFrameworkVersion="10.0.0"
-                                 LatestRuntimeFrameworkVersion="10.0.0" />
     </ItemGroup>
 </Project>
