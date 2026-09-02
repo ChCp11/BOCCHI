@@ -89,7 +89,7 @@ public sealed class CarrotHunterService
 
     private CarrotData? currentAuthored;
 
-    /// <summary>The region of the last completed North Horn pad, used to Return only at region boundaries.</summary>
+    /// <summary>The last completed North Horn region, used to trigger aethernet travel at boundaries.</summary>
     private NorthHornCarrotRegion? lastNorthHornRegion;
 
     private ulong? currentLiveCarrotId;
@@ -194,7 +194,7 @@ public sealed class CarrotHunterService
         RecalculateAndAdvance();
         log.Information(
             "Carrot hunt started ({Kind}, {Count} spots)",
-            zones.GetZone().ZoneId == ZoneId.NorthHorn ? "North Horn NE→NW→Middle→South→SW" : "nearest-neighbor TSP",
+            zones.GetZone().ZoneId == ZoneId.NorthHorn ? "North Horn Middle→NE→NW→South→SW" : "nearest-neighbor TSP",
             tour.Count);
     }
 
@@ -347,8 +347,20 @@ public sealed class CarrotHunterService
                 && NorthHornCarrotRegions.Classify(authored.Id) != previousRegion;
 
             // The authored North Horn order owns travel decisions: walk every pad inside
-            // one region, then Return exactly once before starting the next region.
-            Phase = crossedRegion ? CarrotHuntPhase.Returning : CarrotHuntPhase.Pathing;
+            // one region, then use aethernet exactly once before starting the next region.
+            if (crossedRegion
+                && TryChooseAethernetHop(player.Position, destination, aetherytes, main, out AethernetData departure, out AethernetData arrival))
+            {
+                hopDeparture = departure;
+                hopArrival = arrival;
+                Phase = AetheryteApproach.IsReadyForLifestream(zone, lifestream, player.Position)
+                        && AetheryteApproach.IsAlreadyAtAetheryte(departure, player.Position)
+                    ? CarrotHuntPhase.Teleporting
+                    : CarrotHuntPhase.ApproachingAetheryte;
+                return;
+            }
+
+            Phase = CarrotHuntPhase.Pathing;
             return;
         }
 
@@ -1317,6 +1329,44 @@ public sealed class CarrotHunterService
         return bestMode;
     }
 
+    private static bool TryChooseAethernetHop(
+        Vector3 from,
+        Vector3 to,
+        IReadOnlyList<AethernetData> aetherytes,
+        AethernetData main,
+        out AethernetData departure,
+        out AethernetData arrival)
+    {
+        departure = null!;
+        arrival = null!;
+        float bestCost = float.PositiveInfinity;
+
+        foreach (AethernetData candidateDeparture in aetherytes)
+        {
+            foreach (AethernetData candidateArrival in aetherytes)
+            {
+                if (candidateDeparture.Id == candidateArrival.Id
+                    || !IsUsableCarrotArrival(candidateArrival, main))
+                {
+                    continue;
+                }
+
+                float cost = from.Distance2D(candidateDeparture.Position)
+                    + candidateArrival.Position.Distance2D(to);
+                if (cost >= bestCost)
+                {
+                    continue;
+                }
+
+                bestCost = cost;
+                departure = candidateDeparture;
+                arrival = candidateArrival;
+            }
+        }
+
+        return !float.IsPositiveInfinity(bestCost);
+    }
+
     /// <summary>Lifestream landing pad — camp is always ok; locked field shards are not.</summary>
     private static bool IsUsableCarrotArrival(AethernetData shard, AethernetData main) =>
         shard.Id == main.Id || OccultCrescentHelper.IsAethernetUnlocked(shard.Id);
@@ -1581,16 +1631,7 @@ public sealed class CarrotHunterService
         {
             RememberCompletedNorthHornRegion(authored);
             log.Debug("Carrot hunt: finished authored {Id} near {Pos:F0}", authored.Id, currentTargetPosition);
-            if (treasureConfig.LoopCarrotHunt)
-            {
-                // Finding a carrot means others may have respawned — every pad must be checked again.
-                finishedAuthoredIds.Clear();
-                log.Debug("Carrot hunt: loop — cleared empty skips after using a carrot");
-            }
-            else
-            {
-                finishedAuthoredIds.Add(authored.Id);
-            }
+            finishedAuthoredIds.Add(authored.Id);
         }
 
         vnav.Stop();
