@@ -343,12 +343,12 @@ public sealed class CarrotHunterService
         Vector3 destination = currentTargetPosition;
         if (NorthHornCarrotRegions.AppliesTo(zone.ZoneId))
         {
-            bool crossedRegion = lastNorthHornRegion is { } previousRegion
-                && NorthHornCarrotRegions.Classify(authored.Id) != previousRegion;
+            bool needsAethernet = lastNorthHornRegion is not { } previousRegion
+                || NorthHornCarrotRegions.Classify(authored.Id) != previousRegion;
 
             // The authored North Horn order owns travel decisions: walk every pad inside
-            // one region, then use aethernet exactly once before starting the next region.
-            if (crossedRegion
+            // one region. Use aethernet for the initial approach and every region change.
+            if (needsAethernet
                 && TryChooseAethernetHop(player.Position, destination, aetherytes, main, out AethernetData boundaryDeparture, out AethernetData boundaryArrival))
             {
                 hopDeparture = boundaryDeparture;
