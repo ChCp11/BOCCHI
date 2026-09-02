@@ -8,10 +8,10 @@ namespace BOCCHI.Treasure.Hunt;
 internal enum NorthHornCarrotRegion
 {
     Northeast = 0,
-    Northwest = 1,
-    Middle = 2,
-    South = 3,
-    Southwest = 4,
+    East = 1,
+    Northwest = 2,
+    Middle = 3,
+    South = 4,
 }
 
 internal static class NorthHornCarrotRegions
@@ -23,20 +23,20 @@ internal static class NorthHornCarrotRegions
     public static readonly NorthHornCarrotRegion[] TourOrder =
     [
         NorthHornCarrotRegion.Middle,
-        NorthHornCarrotRegion.Northeast,
+        NorthHornCarrotRegion.East,
         NorthHornCarrotRegion.Northwest,
         NorthHornCarrotRegion.South,
-        NorthHornCarrotRegion.Southwest,
+        NorthHornCarrotRegion.Northeast,
     ];
 
     private static readonly IReadOnlyDictionary<NorthHornCarrotRegion, int[]> PadOrder =
         new Dictionary<NorthHornCarrotRegion, int[]>
         {
-            [NorthHornCarrotRegion.Northeast] = [4, 8, 17, 24, 22, 5, 21],
+            [NorthHornCarrotRegion.Northeast] = [8, 17],
+            [NorthHornCarrotRegion.East] = [4, 22, 24, 5, 21],
             [NorthHornCarrotRegion.Northwest] = [15, 19, 2, 14, 16, 13, 7],
             [NorthHornCarrotRegion.Middle] = [9, 23, 1],
-            [NorthHornCarrotRegion.South] = [12, 18],
-            [NorthHornCarrotRegion.Southwest] = [20, 3, 25, 11, 6, 10],
+            [NorthHornCarrotRegion.South] = [12, 18, 20, 3, 25, 11, 6, 10],
         };
 
     public static bool AppliesTo(ZoneId zone) => zone == ZoneId.NorthHorn;
