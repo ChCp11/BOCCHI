@@ -341,17 +341,23 @@ public sealed class CarrotHunterService
         AethernetData main = zone.GetMainAetheryte();
 
         Vector3 destination = currentTargetPosition;
+        if (NorthHornCarrotRegions.AppliesTo(zone.ZoneId))
+        {
+            bool crossedRegion = lastNorthHornRegion is { } previousRegion
+                && NorthHornCarrotRegions.Classify(authored.Id) != previousRegion;
+
+            // The authored North Horn order owns travel decisions: walk every pad inside
+            // one region, then Return exactly once before starting the next region.
+            Phase = crossedRegion ? CarrotHuntPhase.Returning : CarrotHuntPhase.Pathing;
+            return;
+        }
+
         float localDist = player.Position.Distance2D(destination);
         bool wrongFloor = !HuntDistances.IsSameFloor(player.Position, destination);
         // Keep Return for pad↔pad tour hops — and when 2D looks close but we are on the
         // wrong shelf (cliff / ridge). Direct then climbs into mesh ("underground").
-        bool crossedNorthHornRegion = NorthHornCarrotRegions.AppliesTo(zone.ZoneId)
-            && lastNorthHornRegion is { } previousRegion
-            && NorthHornCarrotRegions.Classify(authored.Id) != previousRegion;
         bool allowReturn = currentLiveCarrotId == null
-            && (NorthHornCarrotRegions.AppliesTo(zone.ZoneId)
-                ? crossedNorthHornRegion
-                : localDist > HuntDistances.NearbyLiveDivertRange || wrongFloor);
+            && (localDist > HuntDistances.NearbyLiveDivertRange || wrongFloor);
 
         HopMode mode = ChooseHopMode(
             player.Position,
