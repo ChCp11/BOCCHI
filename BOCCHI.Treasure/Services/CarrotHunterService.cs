@@ -361,8 +361,8 @@ public sealed class CarrotHunterService
         Vector3 destination = currentTargetPosition;
         if (NorthHornCarrotRegions.AppliesTo(zone.ZoneId))
         {
-            bool initialApproach = lastNorthHornRegion is not { } previousRegion;
-            bool crossedRegion = !initialApproach
+            bool initialApproach = lastNorthHornRegion == null;
+            bool crossedRegion = lastNorthHornRegion is { } previousRegion
                 && NorthHornCarrotRegions.Classify(authored.Id) != previousRegion;
 
             // The authored North Horn order owns travel decisions: walk every pad inside
