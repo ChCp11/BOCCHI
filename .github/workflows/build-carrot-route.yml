@@ -27,8 +27,8 @@ jobs:
         shell: bash
         run: |
           git clone --depth 1 --recurse-submodules https://github.com/goatcorp/Plogon.git "$RUNNER_TEMP/ci-plogon"
-          mkdir -p ci-manifests/stable/BOCCHI ci-manifests/testing ci-output ci-work ci-artifacts
-          cp assets/icon.png ci-manifests/stable/BOCCHI/icon.png
+          mkdir -p ci-manifests/stable/BOCCHI/images ci-manifests/testing ci-output ci-work ci-artifacts
+          cp assets/icon.png ci-manifests/stable/BOCCHI/images/icon.png
           cat > ci-manifests/stable/BOCCHI/manifest.toml <<EOF
           [plugin]
           repository = "https://github.com/ChCp11/BOCCHI.git"
