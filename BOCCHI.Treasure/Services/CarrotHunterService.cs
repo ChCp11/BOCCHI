@@ -191,7 +191,7 @@ public sealed class CarrotHunterService
         RecalculateAndAdvance();
         log.Information(
             "Carrot hunt started ({Kind}, {Count} spots)",
-            zones.GetZone().ZoneId == ZoneId.NorthHorn ? "North Horn Middle→NW→NE" : "nearest-neighbor TSP",
+            zones.GetZone().ZoneId == ZoneId.NorthHorn ? "North Horn NE→NW→Middle→South→SW" : "nearest-neighbor TSP",
             tour.Count);
     }
 
@@ -1052,7 +1052,7 @@ public sealed class CarrotHunterService
 
         if (NorthHornCarrotRegions.AppliesTo(zone.ZoneId))
         {
-            RebuildNorthHornRegionTour(remaining, preferStartId, start, aetherytes, main);
+            RebuildNorthHornRegionTour(remaining);
             return;
         }
 
@@ -1064,32 +1064,25 @@ public sealed class CarrotHunterService
     }
 
     /// <summary>Walk the regions in TourOrder — death-zone babysitting stays one stretch.</summary>
-    private void RebuildNorthHornRegionTour(
-        List<CarrotData> remaining,
-        int? preferStartId,
-        Vector3 start,
-        List<AethernetData> aetherytes,
-        AethernetData main)
+    private void RebuildNorthHornRegionTour(List<CarrotData> remaining)
     {
         foreach (NorthHornCarrotRegion region in NorthHornCarrotRegions.TourOrder)
         {
             List<CarrotData> inRegion = remaining
-                .Where(c => NorthHornCarrotRegions.Classify(c.Position) == region)
+                .Where(c => NorthHornCarrotRegions.Classify(c.Id) == region)
+                .OrderBy(c => NorthHornCarrotRegions.PadIndex(region, c.Id))
+                .ThenBy(c => c.Id)
                 .ToList();
             if (inRegion.Count == 0)
             {
                 continue;
             }
 
-            int? prefer = preferStartId is int id && inRegion.Any(c => c.Id == id)
-                ? id
-                : null;
-            AppendNearestNeighborTour(inRegion, prefer, start, aetherytes, main);
-            start = tour[^1].Position;
+            tour.AddRange(inRegion);
         }
 
         log.Debug(
-            "Carrot hunt North Horn tour: {Count} remaining (start {Start}, {Order})",
+            "Carrot hunt North Horn fixed-region tour: {Count} remaining (start {Start}, {Order})",
             tour.Count,
             tour.Count > 0 ? tour[0].Id : 0,
             string.Join("→", NorthHornCarrotRegions.TourOrder));
@@ -1426,12 +1419,12 @@ public sealed class CarrotHunterService
 
         if (currentPad != null)
         {
-            return NorthHornCarrotRegions.Classify(pad.Position)
-                   == NorthHornCarrotRegions.Classify(currentPad.Position);
+            return NorthHornCarrotRegions.Classify(pad.Id)
+                   == NorthHornCarrotRegions.Classify(currentPad.Id);
         }
 
         NorthHornCarrotRegion? active = GetActiveNorthHornRegion();
-        return active == null || NorthHornCarrotRegions.Classify(pad.Position) == active;
+        return active == null || NorthHornCarrotRegions.Classify(pad.Id) == active;
     }
 
     private NorthHornCarrotRegion? GetActiveNorthHornRegion()
@@ -1446,7 +1439,7 @@ public sealed class CarrotHunterService
             }
 
             // Use TourIndex, not enum ordinal.
-            NorthHornCarrotRegion region = NorthHornCarrotRegions.Classify(remaining.Position);
+            NorthHornCarrotRegion region = NorthHornCarrotRegions.Classify(remaining.Id);
             int order = NorthHornCarrotRegions.TourIndex(region);
             if (order < activeOrder)
             {
@@ -1971,3 +1964,4 @@ public sealed class CarrotHunterService
         log.Information("Carrot hunt stopped");
     }
 }
+
