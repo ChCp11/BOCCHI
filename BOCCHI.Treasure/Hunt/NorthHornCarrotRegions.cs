@@ -1,18 +1,17 @@
-using System.Numerics;
 using BOCCHI.Common.Data.Zones;
 
 namespace BOCCHI.Treasure.Hunt;
 
 /// <summary>
-///     North Horn carrot tour regions. Death-zone aggro is concentrated in the north
-///     (Moldering / Sinking); keep those together after the safer center and west ridge.
+///     User-authored North Horn carrot regions and fixed traversal order.
 /// </summary>
 internal enum NorthHornCarrotRegion
 {
-    Middle = 0,
-    West = 1,
-    Northwest = 2,
-    Northeast = 3,
+    Northeast = 0,
+    Northwest = 1,
+    Middle = 2,
+    South = 3,
+    Southwest = 4,
 }
 
 internal static class NorthHornCarrotRegions
@@ -23,11 +22,22 @@ internal static class NorthHornCarrotRegions
     /// </summary>
     public static readonly NorthHornCarrotRegion[] TourOrder =
     [
-        NorthHornCarrotRegion.Middle,
-        NorthHornCarrotRegion.West,
-        NorthHornCarrotRegion.Northwest,
         NorthHornCarrotRegion.Northeast,
+        NorthHornCarrotRegion.Northwest,
+        NorthHornCarrotRegion.Middle,
+        NorthHornCarrotRegion.South,
+        NorthHornCarrotRegion.Southwest,
     ];
+
+    private static readonly IReadOnlyDictionary<NorthHornCarrotRegion, int[]> PadOrder =
+        new Dictionary<NorthHornCarrotRegion, int[]>
+        {
+            [NorthHornCarrotRegion.Northeast] = [4, 8, 17, 24, 22, 5, 21],
+            [NorthHornCarrotRegion.Northwest] = [15, 19, 2, 14, 16, 13, 7],
+            [NorthHornCarrotRegion.Middle] = [9, 23, 1],
+            [NorthHornCarrotRegion.South] = [12, 18],
+            [NorthHornCarrotRegion.Southwest] = [20, 3, 25, 11, 6, 10],
+        };
 
     public static bool AppliesTo(ZoneId zone) => zone == ZoneId.NorthHorn;
 
@@ -38,34 +48,28 @@ internal static class NorthHornCarrotRegions
         return index < 0 ? int.MaxValue : index;
     }
 
-    public static NorthHornCarrotRegion Classify(Vector3 position)
+    public static int PadIndex(NorthHornCarrotRegion region, int padId)
     {
-        float x = position.X;
-        float z = position.Z;
-
-        // North of Unhallowed Hamlet — the death-zone band. Moldering (west) vs Sinking (east).
-        // Checked first so the far-west ridge test below cannot swallow northern pads.
-        if (z < -300f)
+        if (!PadOrder.TryGetValue(region, out int[]? order))
         {
-            return x < -200f
-                ? NorthHornCarrotRegion.Northwest
-                : NorthHornCarrotRegion.Northeast;
+            return int.MaxValue;
         }
 
-        // Suspended Masonry / far west ridge. Its own block rather than part of Northwest:
-        // these sit in the southern half (z up to ~940), so folding them in gave "Northwest"
-        // an ~1800 yalm north-south span and let peel-off wander the length of it.
-        if (x < -400f)
-        {
-            return NorthHornCarrotRegion.West;
-        }
+        int index = Array.IndexOf(order, padId);
+        return index < 0 ? int.MaxValue : index;
+    }
 
-        // East coast above the camp belt.
-        if (x > 500f && z < -200f)
+    public static NorthHornCarrotRegion Classify(int padId)
+    {
+        foreach ((NorthHornCarrotRegion region, int[] pads) in PadOrder)
         {
-            return NorthHornCarrotRegion.Northeast;
+            if (Array.IndexOf(pads, padId) >= 0)
+            {
+                return region;
+            }
         }
 
         return NorthHornCarrotRegion.Middle;
     }
 }
+
