@@ -122,6 +122,9 @@ public sealed class CarrotHunterService
     /// <summary>After mid-route Return, teleport from camp before walking to the pad.</summary>
     private bool returnThenAethernet;
 
+    /// <summary>After the final region Return, start the next loop from the beginning.</summary>
+    private bool returnThenRestartLoop;
+
     private float approachBestDistance = float.MaxValue;
 
     private DateTime approachLastProgressUtc = DateTime.MinValue;
@@ -194,7 +197,7 @@ public sealed class CarrotHunterService
         RecalculateAndAdvance();
         log.Information(
             "Carrot hunt started ({Kind}, {Count} spots)",
-            zones.GetZone().ZoneId == ZoneId.NorthHorn ? "North Horn Middle→NE→NW→South→SW" : "nearest-neighbor TSP",
+            zones.GetZone().ZoneId == ZoneId.NorthHorn ? "North Horn Middle→East→NW→South→NE" : "nearest-neighbor TSP",
             tour.Count);
     }
 
@@ -281,12 +284,26 @@ public sealed class CarrotHunterService
             vnav.Stop();
         }
 
+        IZone zone = zones.GetZone();
+        if (NorthHornCarrotRegions.AppliesTo(zone.ZoneId) && !zone.IsInBasecamp())
+        {
+            bool restartAfterReturn = treasureConfig.LoopCarrotHunt
+                && InventoryItemAssist.Has(FortuneCarrotItemId);
+            log.Information("Carrot hunt: final region finished — returning to base camp");
+            returnThenRestartLoop = restartAfterReturn;
+            returnThenStop = !restartAfterReturn;
+            returnThenAethernet = false;
+            ClearHop();
+            Phase = CarrotHuntPhase.Returning;
+            return;
+        }
+
         if (TryRestartLoop())
         {
             return;
         }
 
-        if (treasureConfig.ReturnToBaseCampAfterHunt && !zones.GetZone().IsInBasecamp())
+        if (treasureConfig.ReturnToBaseCampAfterHunt && !zone.IsInBasecamp())
         {
             log.Information("Carrot hunt: route finished — returning to base camp");
             returnThenStop = true;
@@ -328,6 +345,7 @@ public sealed class CarrotHunterService
         ClearHop();
         returnThenStop = false;
         returnThenAethernet = false;
+        returnThenRestartLoop = false;
         activeReturnChain = null;
 
         if (currentAuthored is not { } authored)
@@ -343,12 +361,24 @@ public sealed class CarrotHunterService
         Vector3 destination = currentTargetPosition;
         if (NorthHornCarrotRegions.AppliesTo(zone.ZoneId))
         {
-            bool needsAethernet = lastNorthHornRegion is not { } previousRegion
-                || NorthHornCarrotRegions.Classify(authored.Id) != previousRegion;
+            bool initialApproach = lastNorthHornRegion is not { } previousRegion;
+            bool crossedRegion = !initialApproach
+                && NorthHornCarrotRegions.Classify(authored.Id) != previousRegion;
 
             // The authored North Horn order owns travel decisions: walk every pad inside
-            // one region. Use aethernet for the initial approach and every region change.
-            if (needsAethernet
+            // one region. Use aethernet for the initial approach. At a region boundary,
+            // Return first, then teleport from base camp to the next region.
+            if (crossedRegion
+                && TryChooseAethernetArrival(destination, aetherytes, main, out AethernetData nextArrival))
+            {
+                hopDeparture = main;
+                hopArrival = nextArrival;
+                returnThenAethernet = true;
+                Phase = CarrotHuntPhase.Returning;
+                return;
+            }
+
+            if (initialApproach
                 && TryChooseAethernetHop(player.Position, destination, aetherytes, main, out AethernetData boundaryDeparture, out AethernetData boundaryArrival))
             {
                 hopDeparture = boundaryDeparture;
@@ -454,6 +484,14 @@ public sealed class CarrotHunterService
                 log.Warning("Carrot hunt: Return failed — walking instead");
                 returnThenAethernet = false;
                 ClearHop();
+                if (returnThenRestartLoop)
+                {
+                    returnThenRestartLoop = false;
+                    finishedAuthoredIds.Clear();
+                    RecalculateAndAdvance();
+                    return;
+                }
+
                 if (returnThenStop)
                 {
                     BocchiChat.Print(chat, uiConfig, FinishedRouteMessage);
@@ -494,6 +532,15 @@ public sealed class CarrotHunterService
     private void OnReturnArrived()
     {
         vnav.Stop();
+        if (returnThenRestartLoop)
+        {
+            returnThenRestartLoop = false;
+            finishedAuthoredIds.Clear();
+            log.Information("Carrot hunt: final Return complete — starting next loop");
+            RecalculateAndAdvance();
+            return;
+        }
+
         if (returnThenStop)
         {
             BocchiChat.Print(chat, uiConfig, FinishedRouteMessage);
@@ -646,10 +693,6 @@ public sealed class CarrotHunterService
         }
 
         float distTarget = player.Position.Distance2D(currentTargetPosition);
-        if (MaybeDismountNear(distTarget))
-        {
-            return;
-        }
 
         if (currentLiveCarrotId != null
             && (distTarget <= HuntDistances.UseRadius || IsStuckNearTarget(distTarget)))
@@ -1367,6 +1410,34 @@ public sealed class CarrotHunterService
         return !float.IsPositiveInfinity(bestCost);
     }
 
+    private static bool TryChooseAethernetArrival(
+        Vector3 to,
+        IReadOnlyList<AethernetData> aetherytes,
+        AethernetData main,
+        out AethernetData arrival)
+    {
+        arrival = null!;
+        float bestDistance = float.PositiveInfinity;
+        foreach (AethernetData candidate in aetherytes)
+        {
+            if (candidate.Id == main.Id || !IsUsableCarrotArrival(candidate, main))
+            {
+                continue;
+            }
+
+            float distance = candidate.Position.Distance2D(to);
+            if (distance >= bestDistance)
+            {
+                continue;
+            }
+
+            bestDistance = distance;
+            arrival = candidate;
+        }
+
+        return !float.IsPositiveInfinity(bestDistance);
+    }
+
     /// <summary>Lifestream landing pad — camp is always ok; locked field shards are not.</summary>
     private static bool IsUsableCarrotArrival(AethernetData shard, AethernetData main) =>
         shard.Id == main.Id || OccultCrescentHelper.IsAethernetUnlocked(shard.Id);
@@ -1978,6 +2049,7 @@ public sealed class CarrotHunterService
         activeReturnChain = null;
         returnThenStop = false;
         returnThenAethernet = false;
+        returnThenRestartLoop = false;
     }
 
     private bool TryUseFortuneCarrot(bool manual = false)
