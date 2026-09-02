@@ -6,10 +6,4 @@
     <Import
             Project="$(MSBuildThisFileDirectory)Directory.Build.Ocelot.$(OcelotRefSet).props"
             Condition="!$(MSBuildProjectName.StartsWith('Ocelot'))"/>
-    <ItemGroup>
-        <KnownFrameworkReference Update="Microsoft.WindowsDesktop.App.WindowsForms"
-                                 TargetingPackVersion="10.0.0"
-                                 DefaultRuntimeFrameworkVersion="10.0.0"
-                                 LatestRuntimeFrameworkVersion="10.0.0" />
-    </ItemGroup>
 </Project>
