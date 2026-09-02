@@ -26,10 +26,10 @@ jobs:
       - name: Prepare Plogon build
         shell: bash
         run: |
-          git clone --depth 1 https://github.com/goatcorp/Plogon.git ci-plogon
-          mkdir -p ci-manifests/BOCCHI ci-output ci-work ci-artifacts
-          cp assets/icon.png ci-manifests/BOCCHI/icon.png
-          cat > ci-manifests/BOCCHI/manifest.toml <<EOF
+          git clone --depth 1 --recurse-submodules https://github.com/goatcorp/Plogon.git ci-plogon
+          mkdir -p ci-manifests/stable/BOCCHI ci-manifests/testing ci-output ci-work ci-artifacts
+          cp assets/icon.png ci-manifests/stable/BOCCHI/icon.png
+          cat > ci-manifests/stable/BOCCHI/manifest.toml <<EOF
           [plugin]
           repository = "https://github.com/ChCp11/BOCCHI.git"
           commit = "$GITHUB_SHA"
