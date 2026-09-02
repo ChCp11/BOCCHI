@@ -22,9 +22,9 @@ internal static class NorthHornCarrotRegions
     /// </summary>
     public static readonly NorthHornCarrotRegion[] TourOrder =
     [
+        NorthHornCarrotRegion.Middle,
         NorthHornCarrotRegion.Northeast,
         NorthHornCarrotRegion.Northwest,
-        NorthHornCarrotRegion.Middle,
         NorthHornCarrotRegion.South,
         NorthHornCarrotRegion.Southwest,
     ];
