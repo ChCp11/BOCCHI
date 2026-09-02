@@ -26,7 +26,7 @@ jobs:
       - name: Prepare Plogon build
         shell: bash
         run: |
-          git clone --depth 1 --recurse-submodules https://github.com/goatcorp/Plogon.git ci-plogon
+          git clone --depth 1 --recurse-submodules https://github.com/goatcorp/Plogon.git "$RUNNER_TEMP/ci-plogon"
           mkdir -p ci-manifests/stable/BOCCHI ci-manifests/testing ci-output ci-work ci-artifacts
           cp assets/icon.png ci-manifests/stable/BOCCHI/icon.png
           cat > ci-manifests/stable/BOCCHI/manifest.toml <<EOF
@@ -42,11 +42,12 @@ jobs:
       - name: Build with Dalamud Plogon
         shell: bash
         run: |
-          dotnet run --project ci-plogon/Plogon/Plogon.csproj -- \
+          dotnet run --project "$RUNNER_TEMP/ci-plogon/Plogon/Plogon.csproj" -- \
             --manifest-folder="$GITHUB_WORKSPACE/ci-manifests" \
+            --master-manifest-folder="$GITHUB_WORKSPACE/ci-manifests" \
             --output-folder="$GITHUB_WORKSPACE/ci-output" \
             --work-folder="$GITHUB_WORKSPACE/ci-work" \
-            --static-folder="$GITHUB_WORKSPACE/ci-plogon/Plogon/static" \
+            --static-folder="$RUNNER_TEMP/ci-plogon/Plogon/static" \
             --artifact-folder="$GITHUB_WORKSPACE/ci-artifacts" \
             --build-overrides-file="$GITHUB_WORKSPACE/ci-manifests/overrides.toml" \
             --mode=Development --build-all
