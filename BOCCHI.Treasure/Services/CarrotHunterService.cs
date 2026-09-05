@@ -5,6 +5,7 @@ using BOCCHI.Common.Data.Aethernet;
 using BOCCHI.Common.Data.OccultCrescent;
 using BOCCHI.Common.Data.Zones;
 using BOCCHI.Common.Data.Zones.Graph;
+using BOCCHI.Common.Extensions;
 using BOCCHI.Common.Services;
 using BOCCHI.Treasure.ChainRecipes;
 using BOCCHI.Treasure.Data;
@@ -13,6 +14,7 @@ using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 using ECommons.Throttlers;
+using ECommons.GameFunctions;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
@@ -44,6 +46,7 @@ public sealed class CarrotHunterService
     IPlayer player,
     ICondition conditions,
     IObjectTable objects,
+    ITargetManager targets,
     IVNavmeshIpc vnav,
     IPathfinder pathfinder,
     IZoneProvider zones,
@@ -123,6 +126,8 @@ public sealed class CarrotHunterService
     private int combatRecoveryStep;
 
     private DateTime combatRecoveryNextStepUtc = DateTime.MinValue;
+
+    private ulong combatTargetId = 0xE0000000;
 
     private AethernetData? hopDeparture;
 
@@ -329,7 +334,7 @@ public sealed class CarrotHunterService
             return;
         }
 
-        if (TickCombatRecovery())
+        if (combatRecoveryActive && TickCombatRecovery())
         {
             return;
         }
@@ -832,6 +837,14 @@ public sealed class CarrotHunterService
 
     private void TickOpeningBunny()
     {
+        // Never attempt the coffer interaction while combat is active. Acquire the closest
+        // hostile engaged with us first, then run the requested defensive/offensive sequence.
+        if (conditions[ConditionFlag.InCombat])
+        {
+            TickCombatRecovery();
+            return;
+        }
+
         IGameObject? bunny = FindBunnyNear(currentTargetPosition);
         if (bunny == null)
         {
@@ -1430,14 +1443,18 @@ public sealed class CarrotHunterService
             combatRecoveryNextStepUtc = DateTime.MinValue;
             vnav.Stop();
             pathfinder.Stop();
+            TargetNearestAggressor();
             log.Information("Carrot hunt: chest opening interrupted by combat — starting recovery sequence");
         }
+
+        TargetNearestAggressor();
 
         if (!conditions[ConditionFlag.InCombat])
         {
             rotationSolver.ChangeOperatingMode(RSRStateCommandType.Off);
             combatRecoveryActive = false;
             combatRecoveryStep = 0;
+            combatTargetId = 0xE0000000;
             Phase = FindBunnyNear(currentTargetPosition) != null
                 ? CarrotHuntPhase.OpeningBunny
                 : CarrotHuntPhase.WaitingForBunny;
@@ -1483,12 +1500,32 @@ public sealed class CarrotHunterService
     {
         Ocelot.Actions.Action action = new(ActionType.Action, actionId);
         ulong targetId = targetEnemy
-            ? player.PlayerCharacter?.TargetObjectId ?? 0xE0000000
+            ? combatTargetId
             : 0xE0000000;
         if (!action.CanCast() || !action.Cast(targetId))
         {
             log.Debug("Carrot hunt: recovery action {Name} unavailable — skipped", name);
         }
+    }
+
+    private void TargetNearestAggressor()
+    {
+        IGameObject? localPlayer = objects.LocalPlayer;
+        List<IBattleNpc> hostiles = objects.OfType<IBattleNpc>()
+            .Where(enemy => enemy is { IsDead: false, IsTargetable: true } && enemy.IsHostile())
+            .ToList();
+        IBattleNpc? closest = hostiles
+            .Where(enemy => enemy.IsTargetingPlayer(localPlayer))
+            .OrderBy(enemy => player.Position.Distance2D(enemy.Position))
+            .FirstOrDefault()
+            ?? hostiles.OrderBy(enemy => player.Position.Distance2D(enemy.Position)).FirstOrDefault();
+        if (closest == null)
+        {
+            return;
+        }
+
+        targets.Target = closest;
+        combatTargetId = closest.GameObjectId;
     }
 
     private static bool TryChooseAethernetHop(
@@ -1784,6 +1821,7 @@ public sealed class CarrotHunterService
         combatRecoveryActive = false;
         combatRecoveryStep = 0;
         combatRecoveryNextStepUtc = DateTime.MinValue;
+        combatTargetId = 0xE0000000;
         currentLiveCarrotId = null;
         waitingForBunnySince = DateTime.MinValue;
         ResetApproachProgress();
