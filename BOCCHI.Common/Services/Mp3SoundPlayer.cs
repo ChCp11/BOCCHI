@@ -114,4 +114,3 @@ public sealed class Mp3SoundPlayer(IDalamudPluginInterface plugin, IPluginLog lo
         reader = null;
     }
 }
-

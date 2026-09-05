@@ -5,7 +5,7 @@ namespace BOCCHI.Treasure.Hunt;
 /// <summary>
 ///     User-authored North Horn carrot regions and fixed traversal order.
 /// </summary>
-internal enum NorthHornCarrotRegion
+public enum NorthHornCarrotRegion
 {
     Northeast = 0,
     East = 1,
@@ -59,6 +59,16 @@ internal static class NorthHornCarrotRegions
         return index < 0 ? int.MaxValue : index;
     }
 
+    /// <summary>One complete circular pass beginning at the selected region.</summary>
+    public static IEnumerable<NorthHornCarrotRegion> TourFrom(NorthHornCarrotRegion start)
+    {
+        int startIndex = Math.Max(0, Array.IndexOf(TourOrder, start));
+        for (int offset = 0; offset < TourOrder.Length; offset++)
+        {
+            yield return TourOrder[(startIndex + offset) % TourOrder.Length];
+        }
+    }
+
     public static NorthHornCarrotRegion Classify(int padId)
     {
         foreach ((NorthHornCarrotRegion region, int[] pads) in PadOrder)
@@ -72,4 +82,3 @@ internal static class NorthHornCarrotRegions
         return NorthHornCarrotRegion.Middle;
     }
 }
-

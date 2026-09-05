@@ -23,7 +23,8 @@ public static class ReturnToBaseCamp
         ICondition conditions,
         IGameGui gui,
         IPathfinder pathfinder,
-        IVNavmeshIpc vnav)
+        IVNavmeshIpc vnav,
+        bool dismountBeforeReturn = true)
     {
         string chainName = chain.Name;
 
@@ -49,7 +50,7 @@ public static class ReturnToBaseCamp
                     }
 
                     // Return is often blocked while mounted.
-                    if (DismountAssist.TryDismount(conditions))
+                    if (dismountBeforeReturn && DismountAssist.TryDismount(conditions))
                     {
                         return StepResult.Success();
                     }
@@ -76,7 +77,7 @@ public static class ReturnToBaseCamp
 
                     TryConfirmReturnDialog(gui, conditions);
 
-                    if (DismountAssist.TryDismount(conditions))
+                    if (dismountBeforeReturn && DismountAssist.TryDismount(conditions))
                     {
                         return ValueTask.FromResult(false);
                     }

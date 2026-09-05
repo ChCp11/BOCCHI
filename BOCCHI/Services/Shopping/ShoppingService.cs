@@ -50,9 +50,23 @@ public sealed class ShoppingService
     ICriticalEncounterContext criticalEncounters,
     IAutomatorMemory memory,
     Func<IMobFarmer> farmerFactory,
+    Func<BOCCHI.Treasure.Services.ICarrotHunter> carrotHunterFactory,
     ILogger<ShoppingService> logger
-) : IOnUpdate
+) : IOnUpdate, ICarrotLoopShopping
 {
+    private const uint OccultCofferItemId = 45970;
+
+    private bool forcedOccultCofferDrain;
+
+    private bool resumeCarrotAfterForcedDrain;
+
+    public void RequestOccultCofferDrain(bool resumeCarrotHuntAfterwards)
+    {
+        forcedOccultCofferDrain = true;
+        resumeCarrotAfterForcedDrain = resumeCarrotHuntAfterwards;
+        buyCooldownUntil = DateTimeOffset.MinValue;
+        logger.Debug("[Shopping] requested post-carrot Occult Coffer currency drain");
+    }
     private IMobFarmer Farmer => farmerFactory();
     private enum Phase
     {
@@ -87,7 +101,7 @@ public sealed class ShoppingService
 
     public void Update()
     {
-        if (!config.EnableAutoShop)
+        if (!config.EnableAutoShop && !forcedOccultCofferDrain)
         {
             if (priorityClaimed || phase != Phase.Idle)
             {
@@ -111,6 +125,12 @@ public sealed class ShoppingService
         ZoneId zoneId = zone.ZoneId;
         int silver = OccultCrescentHelper.GetActiveSilver(zoneId);
         int gold = OccultCrescentHelper.GetActiveGold(zoneId);
+        if (forcedOccultCofferDrain && !HasPendingGoals(zoneId) && phase == Phase.Idle)
+        {
+            FinishShopping();
+            return;
+        }
+
         bool thresholdHit =
             (config.SilverThreshold > 0 && silver >= config.SilverThreshold)
             || (config.GoldThreshold > 0 && gold >= config.GoldThreshold);
@@ -148,7 +168,7 @@ public sealed class ShoppingService
         // Threshold + goals: may interrupt treasure hunt / idle mob-farm waits, but not FATE/CE
         // or an active mob pull/fight.
         bool shouldShop =
-            thresholdHit
+            (thresholdHit || forcedOccultCofferDrain)
             && HasPendingGoals(zoneId)
             && !IsTriageActive()
             && !IsMobFarmerBusy();
@@ -255,9 +275,16 @@ public sealed class ShoppingService
 
     private void FinishShopping()
     {
+        bool resumeCarrot = forcedOccultCofferDrain && resumeCarrotAfterForcedDrain;
+        forcedOccultCofferDrain = false;
+        resumeCarrotAfterForcedDrain = false;
         AbortShopping(resumeAutomation: true);
         buyCooldownUntil = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(30);
         logger.Debug("[Shopping] finished — nothing affordable left or trip complete");
+        if (resumeCarrot && !carrotHunterFactory().Running)
+        {
+            carrotHunterFactory().Toggle();
+        }
     }
 
     private void AbortShopping(bool resumeAutomation)
@@ -432,6 +459,11 @@ public sealed class ShoppingService
 
     private bool HasPendingGoals(ZoneId zoneId)
     {
+        if (forcedOccultCofferDrain && TryResolveForcedCoffer(zoneId, out _))
+        {
+            return true;
+        }
+
         foreach (uint itemId in config.ShoppingOrder)
         {
             if (!config.Shopping.TryGetValue(itemId, out ShopListEntry? setting) || setting == null)
@@ -473,10 +505,42 @@ public sealed class ShoppingService
     private ShopCatalogEntry? PickNextPurchase(ZoneId zoneId, bool preferLiveRow)
     {
         // Buy amounts first, then Keep stock-ups, then Keep Buying sink.
+        int? requiredMenu = preferLiveRow ? openedMenuIndex : null;
+        if (forcedOccultCofferDrain && TryResolveForcedCoffer(zoneId, out ShopCatalogEntry forced, requiredMenu))
+        {
+            return forced;
+        }
+
         return PickByGoal(zoneId, preferLiveRow, ShopGoal.Buy)
                ?? PickByGoal(zoneId, preferLiveRow, ShopGoal.Keep)
                ?? PickByGoal(zoneId, preferLiveRow, ShopGoal.KeepBuying);
     }
+
+    private bool TryResolveForcedCoffer(ZoneId zoneId, out ShopCatalogEntry entry, int? requiredMenu = null)
+    {
+        foreach (ShopCatalogEntry offer in ShopCatalog.PreferredOffers(
+                     OccultCofferItemId,
+                     zoneId,
+                     ShopCurrencyPreference.Silver | ShopCurrencyPreference.Gold))
+        {
+            if (requiredMenu is { } menu && offer.MenuIndex != menu)
+            {
+                continue;
+            }
+
+            if (CanAffordWithoutReserve(offer))
+            {
+                entry = offer;
+                return true;
+            }
+        }
+
+        entry = default;
+        return false;
+    }
+
+    private static bool CanAffordWithoutReserve(ShopCatalogEntry entry) =>
+        OccultCrescentHelper.GetCurrencyCount(entry.CurrencyItemId) >= entry.Cost;
 
     private enum ShopGoal
     {

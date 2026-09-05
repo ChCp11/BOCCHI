@@ -51,6 +51,10 @@ public static class PhantomActions
 
     public static byte CounterstanceUnlock { get; private set; } = 3;
 
+    public static uint GilToss { get; private set; } = 41601;
+
+    public static uint Iainuki { get; private set; } = 41603;
+
     public static void Initialize(IDataManager data)
     {
         ExcelSheet<MKDSupportJob> jobs = data.GetExcelSheet<MKDSupportJob>();
@@ -74,6 +78,8 @@ public static class PhantomActions
         RomeosBalladUnlock = ReadUnlock(jobs, SupportJobId.PhantomBard, 1, RomeosBalladUnlock);
         Counterstance = ReadAction(jobs, SupportJobId.PhantomMonk, 2, Counterstance);
         CounterstanceUnlock = ReadUnlock(jobs, SupportJobId.PhantomMonk, 2, CounterstanceUnlock);
+        GilToss = ReadAction(jobs, SupportJobId.PhantomSamurai, 0, GilToss);
+        Iainuki = ReadAction(jobs, SupportJobId.PhantomSamurai, 2, Iainuki);
     }
 
     private static uint ReadAction(

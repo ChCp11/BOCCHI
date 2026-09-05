@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <AssemblyName>BOCCHI.Common</AssemblyName>
     </PropertyGroup>
@@ -16,4 +16,3 @@
         </None>
     </ItemGroup>
 </Project>
-

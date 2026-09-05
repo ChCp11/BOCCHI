@@ -1,3 +1,5 @@
+using BOCCHI.Treasure.Hunt;
+
 namespace BOCCHI.Treasure.Services;
 
 public enum CarrotHuntPhase
@@ -21,6 +23,16 @@ public interface ICarrotHunter
     TimeSpan Elapsed { get; }
 
     int FortuneCarrotsRemaining { get; }
+
+    int CompletedLocations { get; }
+
+    int TotalLocations { get; }
+
+    int? CurrentLocationId { get; }
+
+    NorthHornCarrotRegion StartRegion { get; set; }
+
+    NorthHornCarrotRegion? CurrentRegion { get; }
 
     bool IsVnavAvailable { get; }
 

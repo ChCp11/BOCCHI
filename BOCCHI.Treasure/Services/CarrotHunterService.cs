@@ -2,6 +2,7 @@ using BOCCHI.Common;
 using BOCCHI.Common.Config;
 using BOCCHI.Common.Data;
 using BOCCHI.Common.Data.Aethernet;
+using BOCCHI.Common.Data.OccultCrescent;
 using BOCCHI.Common.Data.Zones;
 using BOCCHI.Common.Data.Zones.Graph;
 using BOCCHI.Common.Services;
@@ -13,11 +14,14 @@ using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 using ECommons.Throttlers;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
+using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using Ocelot.Chain;
+using Ocelot.Actions;
 using Ocelot.Chain.Extensions;
 using Ocelot.Extensions;
 using Ocelot.Ipc.Lifestream;
+using Ocelot.Ipc.RotationSolverReborn;
 using Ocelot.Ipc.VNavmesh;
 using Ocelot.Lifecycle;
 using Ocelot.Services.Pathfinding;
@@ -53,10 +57,16 @@ public sealed class CarrotHunterService
     ITranslator<MainWindow> translator,
     PandoraAutoOpenHold pandoraAutoOpen,
     NinjaHideAssist ninjaHide,
-    CarrotLocationSyncService carrotLocations
+    CarrotLocationSyncService carrotLocations,
+    IRotationSolverRebornIpc rotationSolver,
+    ICarrotLoopShopping loopShopping
 ) : ICarrotHunter, IOnUpdate, IOnStop
 {
     private const uint FortuneCarrotItemId = 48096;
+
+    private const uint HallowedGroundActionId = 30;
+
+    private const uint FightOrFlightActionId = 20;
 
     private const float BunnySearchRadius = 10f;
 
@@ -108,6 +118,12 @@ public sealed class CarrotHunterService
 
     private bool itemUseIssued;
 
+    private bool combatRecoveryActive;
+
+    private int combatRecoveryStep;
+
+    private DateTime combatRecoveryNextStepUtc = DateTime.MinValue;
+
     private AethernetData? hopDeparture;
 
     private AethernetData? hopArrival;
@@ -150,6 +166,21 @@ public sealed class CarrotHunterService
     public TimeSpan Elapsed => stopwatch.Elapsed;
 
     public int FortuneCarrotsRemaining => InventoryItemAssist.Count(FortuneCarrotItemId);
+
+    public int CompletedLocations => finishedAuthoredIds.Count;
+
+    public int TotalLocations => zones.GetZone().IsOccultCrescentZone()
+        ? carrotLocations.GetHuntPads(zones.GetZone()).Count
+        : 0;
+
+    public int? CurrentLocationId => currentAuthored?.Id;
+
+    public NorthHornCarrotRegion StartRegion { get; set; } = NorthHornCarrotRegion.Middle;
+
+    public NorthHornCarrotRegion? CurrentRegion => currentAuthored is { } authored
+        && NorthHornCarrotRegions.AppliesTo(zones.GetZone().ZoneId)
+            ? NorthHornCarrotRegions.Classify(authored.Id)
+            : null;
 
     public bool IsVnavAvailable => vnav.IsAvailable();
 
@@ -295,6 +326,11 @@ public sealed class CarrotHunterService
             returnThenAethernet = false;
             ClearHop();
             Phase = CarrotHuntPhase.Returning;
+            return;
+        }
+
+        if (TickCombatRecovery())
+        {
             return;
         }
 
@@ -526,7 +562,8 @@ public sealed class CarrotHunterService
                 conditions,
                 gui,
                 pathfinder,
-                vnav));
+                vnav,
+                dismountBeforeReturn: false));
     }
 
     private void OnReturnArrived()
@@ -535,14 +572,15 @@ public sealed class CarrotHunterService
         if (returnThenRestartLoop)
         {
             returnThenRestartLoop = false;
-            finishedAuthoredIds.Clear();
-            log.Information("Carrot hunt: final Return complete — starting next loop");
-            RecalculateAndAdvance();
+            log.Information("Carrot hunt: final Return complete — buying Occult Coffers before next loop");
+            loopShopping.RequestOccultCofferDrain(resumeCarrotHuntAfterwards: true);
+            Teardown();
             return;
         }
 
         if (returnThenStop)
         {
+            loopShopping.RequestOccultCofferDrain(resumeCarrotHuntAfterwards: false);
             BocchiChat.Print(chat, uiConfig, FinishedRouteMessage);
             Teardown();
             return;
@@ -1135,7 +1173,7 @@ public sealed class CarrotHunterService
     /// <summary>Walk the regions in TourOrder — death-zone babysitting stays one stretch.</summary>
     private void RebuildNorthHornRegionTour(List<CarrotData> remaining)
     {
-        foreach (NorthHornCarrotRegion region in NorthHornCarrotRegions.TourOrder)
+        foreach (NorthHornCarrotRegion region in NorthHornCarrotRegions.TourFrom(StartRegion))
         {
             List<CarrotData> inRegion = remaining
                 .Where(c => NorthHornCarrotRegions.Classify(c.Id) == region)
@@ -1154,7 +1192,7 @@ public sealed class CarrotHunterService
             "Carrot hunt North Horn fixed-region tour: {Count} remaining (start {Start}, {Order})",
             tour.Count,
             tour.Count > 0 ? tour[0].Id : 0,
-            string.Join("→", NorthHornCarrotRegions.TourOrder));
+            string.Join("→", NorthHornCarrotRegions.TourFrom(StartRegion)));
     }
 
     private void AppendNearestNeighborTour(
@@ -1370,6 +1408,87 @@ public sealed class CarrotHunterService
         }
 
         return bestMode;
+    }
+
+    /// <summary>
+    /// A carrot has already been consumed, so preserve the bunny and clear attackers before
+    /// retrying the chest. Each unavailable/cooling-down action is skipped without stalling.
+    /// </summary>
+    private bool TickCombatRecovery()
+    {
+        bool vulnerableWindow = itemUseIssued
+                                && Phase is CarrotHuntPhase.WaitingForBunny or CarrotHuntPhase.OpeningBunny;
+        if (!combatRecoveryActive)
+        {
+            if (!vulnerableWindow || !conditions[ConditionFlag.InCombat])
+            {
+                return false;
+            }
+
+            combatRecoveryActive = true;
+            combatRecoveryStep = 0;
+            combatRecoveryNextStepUtc = DateTime.MinValue;
+            vnav.Stop();
+            pathfinder.Stop();
+            log.Information("Carrot hunt: chest opening interrupted by combat — starting recovery sequence");
+        }
+
+        if (!conditions[ConditionFlag.InCombat])
+        {
+            rotationSolver.ChangeOperatingMode(RSRStateCommandType.Off);
+            combatRecoveryActive = false;
+            combatRecoveryStep = 0;
+            Phase = FindBunnyNear(currentTargetPosition) != null
+                ? CarrotHuntPhase.OpeningBunny
+                : CarrotHuntPhase.WaitingForBunny;
+            log.Information("Carrot hunt: combat ended — retrying bunny chest");
+            return true;
+        }
+
+        if (DateTime.UtcNow < combatRecoveryNextStepUtc)
+        {
+            return true;
+        }
+
+        switch (combatRecoveryStep++)
+        {
+            case 0:
+                TryCastRecoveryAction(HallowedGroundActionId, "Invincible");
+                break;
+            case 1:
+                TryCastRecoveryAction(FightOrFlightActionId, "Fight or Flight");
+                break;
+            case 2:
+                TryCastRecoveryAction(PhantomActions.GilToss, "Gil Toss", targetEnemy: true);
+                break;
+            case 3:
+                TryCastRecoveryAction(PhantomActions.Iainuki, "Iainuki", targetEnemy: true);
+                break;
+            case 4:
+                if (!rotationSolver.ChangeOperatingMode(RSRStateCommandType.Manual))
+                {
+                    log.Warning("Carrot hunt: RotationSolver Manual mode was unavailable");
+                }
+
+                break;
+            default:
+                return true;
+        }
+
+        combatRecoveryNextStepUtc = DateTime.UtcNow + TimeSpan.FromMilliseconds(650);
+        return true;
+    }
+
+    private void TryCastRecoveryAction(uint actionId, string name, bool targetEnemy = false)
+    {
+        Ocelot.Actions.Action action = new(ActionType.Action, actionId);
+        ulong targetId = targetEnemy
+            ? player.PlayerCharacter?.TargetObjectId ?? 0xE0000000
+            : 0xE0000000;
+        if (!action.CanCast() || !action.Cast(targetId))
+        {
+            log.Debug("Carrot hunt: recovery action {Name} unavailable — skipped", name);
+        }
     }
 
     private static bool TryChooseAethernetHop(
@@ -1662,6 +1781,9 @@ public sealed class CarrotHunterService
         }
 
         itemUseIssued = false;
+        combatRecoveryActive = false;
+        combatRecoveryStep = 0;
+        combatRecoveryNextStepUtc = DateTime.MinValue;
         currentLiveCarrotId = null;
         waitingForBunnySince = DateTime.MinValue;
         ResetApproachProgress();
@@ -2098,8 +2220,8 @@ public sealed class CarrotHunterService
         vnav.Stop();
         pathfinder.Stop();
         ninjaHide.RestorePreviousGearsetIfNeeded();
+        rotationSolver.ChangeOperatingMode(RSRStateCommandType.Off);
         pandoraAutoOpen.Release();
         log.Information("Carrot hunt stopped");
     }
 }
-

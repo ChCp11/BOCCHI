@@ -120,6 +120,7 @@ public sealed class Plugin(IDalamudPluginInterface plugin, IPluginLog logger) : 
         services.AddSingleton<IRepairService, RepairService>();
         services.AddSingleton<AethernetTeleportChain>();
         services.AddSingleton<ShoppingService>();
+        services.AddSingleton<ICarrotLoopShopping>(sp => sp.GetRequiredService<ShoppingService>());
         services.LoadTrackersModule();
         services.LoadWorldModule();
         services.LoadBuffModule();

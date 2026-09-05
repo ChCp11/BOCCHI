@@ -2,7 +2,9 @@ using BOCCHI.Common;
 using BOCCHI.Common.Config;
 using BOCCHI.Common.Services;
 using BOCCHI.Common.UI;
+using BOCCHI.Common.Data.Zones;
 using BOCCHI.Treasure.Services;
+using BOCCHI.Treasure.Hunt;
 using Dalamud.Bindings.ImGui;
 using Ocelot.Extensions;
 using Ocelot.Services.PlayerState;
@@ -21,6 +23,7 @@ public class TreasureRenderer
     TreasureConfig config,
     UIConfig uiConfig,
     IPlayer player,
+    IZoneProvider zones,
     ITranslator<MainWindow> translator
 ) : IDynamicRenderer
 {
@@ -175,6 +178,25 @@ public class TreasureRenderer
         if (!carrotHunter.Running)
         {
             BocchiUi.DrawIntro(translator.T(".treasure.carrot_hunt_description"));
+
+            if (zones.GetZone().ZoneId == ZoneId.NorthHorn)
+            {
+                NorthHornCarrotRegion selected = carrotHunter.StartRegion;
+                string[] labels = ["中央", "東", "北西", "南・南西", "北東"];
+                NorthHornCarrotRegion[] values =
+                [
+                    NorthHornCarrotRegion.Middle,
+                    NorthHornCarrotRegion.East,
+                    NorthHornCarrotRegion.Northwest,
+                    NorthHornCarrotRegion.South,
+                    NorthHornCarrotRegion.Northeast,
+                ];
+                int index = Array.IndexOf(values, selected);
+                if (ImGui.Combo("開始エリア##carrot-start-region", ref index, labels, labels.Length))
+                {
+                    carrotHunter.StartRegion = values[Math.Clamp(index, 0, values.Length - 1)];
+                }
+            }
         }
 
         if (!carrotHunter.IsVnavAvailable)
@@ -211,6 +233,14 @@ public class TreasureRenderer
             BocchiUi.LabelledValue(
                 translator.T(".treasure.fortune_carrots"),
                 carrotHunter.FortuneCarrotsRemaining.ToString());
+            int total = carrotHunter.TotalLocations;
+            int completed = carrotHunter.CompletedLocations;
+            int percent = total > 0 ? (int)Math.Round(completed * 100d / total) : 0;
+            BocchiUi.LabelledValue("探索進捗", $"{completed}/{total} ({percent}%)");
+            if (carrotHunter.CurrentRegion is { } region)
+            {
+                BocchiUi.LabelledValue("現在地点", $"{region} / ID {carrotHunter.CurrentLocationId}");
+            }
         }
 
         if (showUseCarrot)
