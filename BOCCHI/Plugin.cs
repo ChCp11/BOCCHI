@@ -72,7 +72,9 @@ public sealed class Plugin(IDalamudPluginInterface plugin, IPluginLog logger) : 
         services.AddSingleton<OccultCrescentWindowAutoOpener>();
         services.AddSingleton<CombatPathfindCancelService>();
         services.AddSingleton<IMainWindowTitleBarContributor, IllegalModeTitleBarContributor>();
-        services.AddSingleton<IMainWindowTitleBarContributor, KofiTitleBarContributor>();
+        services.AddSingleton<CarrotHuntTitleBarContributor>();
+        services.AddSingleton<IMainWindowTitleBarContributor>(sp => sp.GetRequiredService<CarrotHuntTitleBarContributor>());
+        services.AddSingleton<IOnUpdate>(sp => sp.GetRequiredService<CarrotHuntTitleBarContributor>());
         services.AddSingleton<IFieldRenderer<MobMultiSelectAttribute>, MobMultiSelectRenderer>();
         services.AddSingleton<IFieldRenderer<DisabledFateIdsAttribute>, DisabledFateIdsRenderer>();
         services.AddSingleton<IFieldRenderer<DisabledCriticalEncounterIdsAttribute>, DisabledCriticalEncounterIdsRenderer>();

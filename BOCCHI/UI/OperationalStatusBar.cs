@@ -70,13 +70,6 @@ public class OperationalStatusBar
 
     public void Render()
     {
-        string carrotToggle = carrotHunter.Running ? "Carrot Hunt: STOP" : "Carrot Hunt: START";
-        if (ImGui.Button($"{carrotToggle}##top-carrot-toggle"))
-        {
-            carrotHunter.Toggle();
-        }
-        ImGui.SameLine(0f, 10f);
-
         bool shopping =
             Automator.SuspendedForShopping
             || (Farmer.Running && Farmer.Suspended && Farmer.YieldReason == FarmerYieldReason.Shopping);
