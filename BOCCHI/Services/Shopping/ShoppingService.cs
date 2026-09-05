@@ -56,6 +56,9 @@ public sealed class ShoppingService
 {
     private const uint OccultCofferItemId = 45970;
 
+    /// <summary>Maximum quantity accepted by the exchange shop quantity selector.</summary>
+    private const int MaxPurchaseQuantity = 99;
+
     private bool forcedOccultCofferDrain;
 
     private bool resumeCarrotAfterForcedDrain;
@@ -437,14 +440,59 @@ public sealed class ShoppingService
             return true;
         }
 
-        logger.Debug($"[Shopping] buy item={entry.Name} ({entry.ItemId}) row={rowIndex} cost={entry.Cost}");
-        FirePurchaseCallback(shop, rowIndex, 1);
-        NotePurchase(entry.ItemId);
+        int quantity = GetPurchaseQuantity(entry);
+        if (quantity <= 0)
+        {
+            return true;
+        }
+
+        logger.Debug(
+            $"[Shopping] buy item={entry.Name} ({entry.ItemId}) row={rowIndex} cost={entry.Cost} quantity={quantity}");
+        if (!FirePurchaseCallback(shop, rowIndex, quantity))
+        {
+            return true;
+        }
+
+        NotePurchase(entry.ItemId, quantity);
         buyCooldownUntil = DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(500);
         return true;
     }
 
-    private void NotePurchase(uint itemId)
+    private int GetPurchaseQuantity(ShopCatalogEntry entry)
+    {
+        int reserve = forcedOccultCofferDrain
+            ? 0
+            : OccultCurrencies.IsSilverCurrency(entry.CurrencyItemId)
+                ? config.ReserveSilver
+                : OccultCurrencies.IsGoldCurrency(entry.CurrencyItemId)
+                    ? config.ReserveGold
+                    : 0;
+        int spendable = Math.Max(0, OccultCrescentHelper.GetCurrencyCount(entry.CurrencyItemId) - reserve);
+        int affordable = entry.Cost > 0 ? spendable / entry.Cost : 0;
+        int quantity = Math.Min(MaxPurchaseQuantity, affordable);
+
+        // A forced post-loop drain and KeepBuying intentionally spend as much as the
+        // shop permits. Fixed Buy/Keep goals must not overshoot their configured target.
+        if (!forcedOccultCofferDrain
+            && config.Shopping.TryGetValue(entry.ItemId, out ShopListEntry? setting)
+            && setting != null)
+        {
+            if (setting.BuyAmount > 0)
+            {
+                quantity = Math.Min(quantity, setting.BuyAmount);
+            }
+            else if (setting.KeepAmount > InventoryItemAssist.Count(entry.ItemId))
+            {
+                quantity = Math.Min(
+                    quantity,
+                    setting.KeepAmount - InventoryItemAssist.Count(entry.ItemId));
+            }
+        }
+
+        return Math.Max(0, quantity);
+    }
+
+    private void NotePurchase(uint itemId, int quantity)
     {
         if (!config.Shopping.TryGetValue(itemId, out ShopListEntry? setting) || setting == null)
         {
@@ -453,7 +501,7 @@ public sealed class ShoppingService
 
         if (setting.BuyAmount > 0)
         {
-            setting.BuyAmount--;
+            setting.BuyAmount = Math.Max(0, setting.BuyAmount - quantity);
         }
     }
 
