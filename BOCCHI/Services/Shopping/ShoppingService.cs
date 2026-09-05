@@ -467,9 +467,9 @@ public sealed class ShoppingService
                 : OccultCurrencies.IsGoldCurrency(entry.CurrencyItemId)
                     ? config.ReserveGold
                     : 0;
-        int spendable = Math.Max(0, OccultCrescentHelper.GetCurrencyCount(entry.CurrencyItemId) - reserve);
-        int affordable = entry.Cost > 0 ? spendable / entry.Cost : 0;
-        int quantity = Math.Min(MaxPurchaseQuantity, affordable);
+        long spendable = Math.Max(0L, OccultCrescentHelper.GetCurrencyCount(entry.CurrencyItemId) - reserve);
+        long affordable = entry.Cost > 0 ? spendable / entry.Cost : 0;
+        int quantity = (int)Math.Min(MaxPurchaseQuantity, affordable);
 
         // A forced post-loop drain and KeepBuying intentionally spend as much as the
         // shop permits. Fixed Buy/Keep goals must not overshoot their configured target.
